@@ -2,30 +2,80 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "appName":                 { "value": "crm-prod" },
-    "location":                { "value": "canadacentral" },
-    "containerImage":          { "value": "PLACEHOLDER_UPDATED_BY_CICD" },
-    "cpuCores":                { "value": "0.5" },
-    "memorySize":              { "value": "1Gi" },
-    "minReplicas":             { "value": 1 },
-    "maxReplicas":             { "value": 3 },
-    "nextauthUrl":             { "value": "https://VOTRE_FQDN.azurecontainerapps.io" },
-    "twilioPhoneNumber":       { "value": "+16413484830" },
-    "twilioWebhookUrl":        { "value": "https://VOTRE_FQDN.azurecontainerapps.io/api/webhooks/twilio/sms" },
-    "emailFrom":               { "value": "support@cloudmature.com" },
-    "azureStorageAccountName": { "value": "crmomnicloud" },
-    "azureStorageContainer":   { "value": "ticket-attachments" },
-    "azureAdClientId":         { "value": "83802945-b2c2-4fd5-ad44-cf0e41fb52e9" },
-    "azureAdTenantId":         { "value": "9fe00940-ea78-4e36-906f-39fc7636e703" },
-    "defaultOrgId":            { "value": "org-demo" },
-    "databaseUrl":             { "value": "" },
-    "directUrl":               { "value": "" },
-    "nextauthSecret":          { "value": "" },
-    "twilioAccountSid":        { "value": "" },
-    "twilioAuthToken":         { "value": "" },
-    "resendApiKey":            { "value": "" },
-    "azureStorageAccountKey":  { "value": "" },
-    "azureAdClientSecret":     { "value": "" },
-    "emailWebhookSecret":      { "value": "" }
+    "appName": {
+      "value": "crm-prod"
+    },
+    "location": {
+      "value": "canadacentral"
+    },
+    "containerImage": {
+      "value": "PLACEHOLDER_UPDATED_BY_CICD"
+    },
+    "cpuCores": {
+      "value": "0.5"
+    },
+    "memorySize": {
+      "value": "1Gi"
+    },
+    "minReplicas": {
+      "value": 1
+    },
+    "maxReplicas": {
+      "value": 3
+    },
+    "nextauthUrl": {
+      "value": "https://crm-prod.icycliff-0feabeb4.canadacentral.azurecontainerapps.io"
+    },
+    "twilioPhoneNumber": {
+      "value": "+16413484830"
+    },
+    "twilioWebhookUrl": {
+      "value": "https://crm-prod.icycliff-0feabeb4.canadacentral.azurecontainerapps.io/api/webhooks/twilio/sms"
+    },
+    "emailFrom": {
+      "value": "support@cloudmature.com"
+    },
+    "azureStorageAccountName": {
+      "value": "crmomnicloud"
+    },
+    "azureStorageContainer": {
+      "value": "ticket-attachments"
+    },
+    "azureAdClientId": {
+      "value": "83802945-b2c2-4fd5-ad44-cf0e41fb52e9"
+    },
+    "azureAdTenantId": {
+      "value": "9fe00940-ea78-4e36-906f-39fc7636e703"
+    },
+    "defaultOrgId": {
+      "value": "org-demo"
+    },
+    "databaseUrl": {
+      "value": ""
+    },
+    "directUrl": {
+      "value": ""
+    },
+    "nextauthSecret": {
+      "value": ""
+    },
+    "twilioAccountSid": {
+      "value": ""
+    },
+    "twilioAuthToken": {
+      "value": ""
+    },
+    "resendApiKey": {
+      "value": ""
+    },
+    "azureStorageAccountKey": {
+      "value": ""
+    },
+    "azureAdClientSecret": {
+      "value": ""
+    },
+    "emailWebhookSecret": {
+      "value": ""
+    }
   }
 }
