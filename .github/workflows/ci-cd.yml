@@ -8,7 +8,7 @@ on:
 
 env:
   NODE_VERSION: '22.x'
-  ACR_NAME: ${{ vars.ACR_NAME }}
+  ACR_NAME: acrcrmomnicloud
   IMAGE_NAME: crm/app
 
 jobs:
