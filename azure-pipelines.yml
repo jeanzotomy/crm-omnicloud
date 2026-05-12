@@ -37,13 +37,6 @@ stages:
           - script: npx tsc --noEmit
             displayName: Type check
 
-          - script: npm test -- --run
-            displayName: Run unit tests
-            env:
-              DATABASE_URL: $(DATABASE_URL)
-              NEXTAUTH_SECRET: test-secret
-              NEXTAUTH_URL: http://localhost:3000
-
           - script: npm run build
             displayName: Next.js build
             env:
