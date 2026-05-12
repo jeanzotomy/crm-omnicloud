@@ -25,6 +25,12 @@ param minReplicas int = 1
 @description('Maximum replicas')
 param maxReplicas int = 3
 
+// ── ACR credentials ──────────────────────────────────────────────────
+param acrLoginServer string = 'acrcrmomnicloud.azurecr.io'
+param acrUsername string = 'acrcrmomnicloud'
+@secure()
+param acrPassword string
+
 // ── Secrets (passed from main, never hardcoded) ───────────────────────
 @secure()
 param databaseUrl string
@@ -86,6 +92,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         traffic: [{ weight: 100, latestRevision: true }]
       }
       secrets: [
+        { name: 'acr-password',                value: acrPassword }
         { name: 'database-url',               value: databaseUrl }
         { name: 'direct-url',                 value: directUrl }
         { name: 'nextauth-secret',             value: nextauthSecret }
@@ -95,6 +102,13 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'azure-storage-account-key',   value: azureStorageAccountKey }
         { name: 'azure-ad-client-secret',      value: azureAdClientSecret }
         { name: 'email-webhook-secret',        value: emailWebhookSecret }
+      ]
+      registries: [
+        {
+          server: acrLoginServer
+          username: acrUsername
+          passwordSecretRef: 'acr-password'
+        }
       ]
     }
     template: {

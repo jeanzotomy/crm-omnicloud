@@ -118,6 +118,7 @@ jobs:
             azureStorageAccountKey=${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
             azureAdClientSecret=${{ secrets.AZURE_AD_CLIENT_SECRET }}
             emailWebhookSecret=${{ secrets.EMAIL_WEBHOOK_SECRET }}
+            acrPassword=${{ secrets.ACR_PASSWORD }}
           failOnStdErr: false
 
       - name: Get deployed FQDN

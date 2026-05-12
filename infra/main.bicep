@@ -19,6 +19,12 @@ param minReplicas int = 1
 @description('Max replicas')
 param maxReplicas int = 3
 
+// ── ACR credentials ──────────────────────────────────────────────────
+param acrLoginServer string = 'acrcrmomnicloud.azurecr.io'
+param acrUsername string = 'acrcrmomnicloud'
+@secure()
+param acrPassword string
+
 // ── Secrets (injected by CI/CD or azd, never committed) ──────────────
 @secure()
 param databaseUrl string
@@ -88,6 +94,9 @@ module containerApp 'modules/container-app.bicep' = {
     azureAdTenantId: azureAdTenantId
     defaultOrgId: defaultOrgId
     emailWebhookSecret: emailWebhookSecret
+    acrLoginServer: acrLoginServer
+    acrUsername: acrUsername
+    acrPassword: acrPassword
   }
 }
 
