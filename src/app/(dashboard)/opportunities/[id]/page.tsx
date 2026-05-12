@@ -6,33 +6,20 @@ import Badge from '@/components/ui/Badge';
 import DeleteButton from '@/components/ui/DeleteButton';
 import { stageBadge } from '@/lib/badges';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { OpportunityStage } from '@prisma/client';
-
-interface Opportunity {
-  id: string;
-  title: string;
-  value: number;
-  stage: OpportunityStage;
-  probability: number;
-  closeDate: string | null;
-  notes: string | null;
-  contact: { id: string; firstName: string; lastName: string } | null;
-  company: { id: string; name: string } | null;
-  assignedTo: { name: string | null; email: string } | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-async function getOpportunity(id: string): Promise<Opportunity | null> {
-  const res = await fetch(`${process.env.NEXTAUTH_URL}/api/opportunities/${id}`, { cache: 'no-store' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Failed to fetch opportunity');
-  return res.json();
-}
+import { prisma } from '@/lib/prisma';
 
 export default async function OpportunityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const opp = await getOpportunity(id);
+
+  const opp = await prisma.opportunity.findUnique({
+    where: { id },
+    include: {
+      contact: { select: { id: true, firstName: true, lastName: true } },
+      company: { select: { id: true, name: true } },
+      assignedTo: { select: { name: true, email: true } },
+    },
+  });
+
   if (!opp) notFound();
 
   const badge = stageBadge(opp.stage);
@@ -75,9 +62,9 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
               </Link>
             ) : undefined} />
             <Info label="Probabilité" value={`${opp.probability}%`} />
-            <Info label="Date de clôture" value={opp.closeDate ? formatDate(opp.closeDate) : undefined} />
+            <Info label="Date de clôture" value={opp.closeDate ? formatDate(opp.closeDate.toISOString()) : undefined} />
             <Info label="Assigné à" value={opp.assignedTo?.name ?? opp.assignedTo?.email} />
-            <Info label="Créé le" value={formatDate(opp.createdAt)} />
+            <Info label="Créé le" value={formatDate(opp.createdAt.toISOString())} />
           </dl>
 
           {opp.notes && (

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     prisma.company.count({ where }),
   ]);
 
-  return NextResponse.json({ companies, total, page, pages: Math.ceil(total / limit) });
+  return NextResponse.json({ data: companies, total, page, pageSize: limit });
 }
 
 export async function POST(req: NextRequest) {

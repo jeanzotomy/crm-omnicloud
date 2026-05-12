@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     prisma.opportunity.count({ where }),
   ]);
 
-  return NextResponse.json({ opportunities, total, page, pages: Math.ceil(total / limit) });
+  return NextResponse.json({ data: opportunities, total, page, pageSize: limit });
 }
 
 export async function POST(req: NextRequest) {

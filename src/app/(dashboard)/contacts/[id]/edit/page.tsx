@@ -2,30 +2,12 @@ import { notFound } from 'next/navigation';
 import { Users } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import ContactForm from '@/components/contacts/ContactForm';
-import type { ContactStatus } from '@prisma/client';
-
-interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  phone: string | null;
-  title: string | null;
-  status: ContactStatus;
-  notes: string | null;
-  companyId: string | null;
-}
-
-async function getContact(id: string): Promise<Contact | null> {
-  const res = await fetch(`${process.env.NEXTAUTH_URL}/api/contacts/${id}`, { cache: 'no-store' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Failed to fetch');
-  return res.json();
-}
+import { prisma } from '@/lib/prisma';
 
 export default async function EditContactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const contact = await getContact(id);
+
+  const contact = await prisma.contact.findUnique({ where: { id } });
   if (!contact) notFound();
 
   return (

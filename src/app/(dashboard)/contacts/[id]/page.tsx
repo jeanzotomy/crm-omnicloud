@@ -6,39 +6,22 @@ import Badge from '@/components/ui/Badge';
 import DeleteButton from '@/components/ui/DeleteButton';
 import { statusBadge, stageBadge } from '@/lib/badges';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { ContactStatus, OpportunityStage } from '@prisma/client';
-
-interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  phone: string | null;
-  title: string | null;
-  status: ContactStatus;
-  notes: string | null;
-  company: { id: string; name: string } | null;
-  opportunities: {
-    id: string;
-    title: string;
-    value: number;
-    stage: OpportunityStage;
-    closeDate: string | null;
-  }[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-async function getContact(id: string): Promise<Contact | null> {
-  const res = await fetch(`${process.env.NEXTAUTH_URL}/api/contacts/${id}`, { cache: 'no-store' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Failed to fetch contact');
-  return res.json();
-}
+import { prisma } from '@/lib/prisma';
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const contact = await getContact(id);
+
+  const contact = await prisma.contact.findUnique({
+    where: { id },
+    include: {
+      company: { select: { id: true, name: true } },
+      opportunities: {
+        select: { id: true, title: true, value: true, stage: true, closeDate: true },
+        orderBy: { updatedAt: 'desc' },
+      },
+    },
+  });
+
   if (!contact) notFound();
 
   const badge = statusBadge(contact.status);
@@ -72,8 +55,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               <Info label="Téléphone" value={contact.phone} />
               <Info label="Entreprise" value={contact.company?.name} />
               <Info label="Statut" value={<Badge label={badge.label} variant={badge.variant} />} />
-              <Info label="Créé le" value={formatDate(contact.createdAt)} />
-              <Info label="Mis à jour" value={formatDate(contact.updatedAt)} />
+              <Info label="Créé le" value={formatDate(contact.createdAt.toISOString())} />
+              <Info label="Mis à jour" value={formatDate(contact.updatedAt.toISOString())} />
             </dl>
             {contact.notes && (
               <div>

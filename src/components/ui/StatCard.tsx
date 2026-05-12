@@ -6,28 +6,48 @@ interface StatCardProps {
   value: string | number;
   icon: LucideIcon;
   description?: string;
-  trend?: { value: number; positive: boolean };
+  color?: 'blue' | 'violet' | 'emerald' | 'amber';
   className?: string;
 }
 
-export default function StatCard({ title, value, icon: Icon, description, trend, className }: StatCardProps) {
+const colorMap = {
+  blue: {
+    icon: 'bg-blue-50 text-blue-600',
+    accent: 'bg-blue-600',
+    glow: 'shadow-blue-100',
+  },
+  violet: {
+    icon: 'bg-violet-50 text-violet-600',
+    accent: 'bg-violet-600',
+    glow: 'shadow-violet-100',
+  },
+  emerald: {
+    icon: 'bg-emerald-50 text-emerald-600',
+    accent: 'bg-emerald-600',
+    glow: 'shadow-emerald-100',
+  },
+  amber: {
+    icon: 'bg-amber-50 text-amber-600',
+    accent: 'bg-amber-600',
+    glow: 'shadow-amber-100',
+  },
+};
+
+export default function StatCard({ title, value, icon: Icon, description, color = 'blue', className }: StatCardProps) {
+  const c = colorMap[color];
   return (
-    <div className={cn('bg-card border rounded-xl p-6 space-y-3', className)}>
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Icon className="h-5 w-5 text-primary" />
+    <div className={cn('relative bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden', className)}>
+      <div className="flex items-start justify-between">
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-3xl font-bold text-gray-900 tracking-tight">{value}</p>
+          {description && <p className="text-xs text-gray-400">{description}</p>}
+        </div>
+        <div className={cn('h-11 w-11 rounded-xl flex items-center justify-center shadow-sm', c.icon)}>
+          <Icon className="h-5 w-5" />
         </div>
       </div>
-      <div className="space-y-1">
-        <p className="text-2xl font-bold tracking-tight">{value}</p>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
-        {trend && (
-          <p className={cn('text-xs font-medium', trend.positive ? 'text-emerald-600' : 'text-destructive')}>
-            {trend.positive ? '+' : ''}{trend.value}% ce mois
-          </p>
-        )}
-      </div>
+      <div className={cn('absolute bottom-0 left-0 h-1 w-full opacity-80', c.accent)} />
     </div>
   );
 }

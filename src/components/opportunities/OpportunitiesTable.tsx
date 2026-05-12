@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, TrendingUp } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { stageBadge } from '@/lib/badges';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -53,8 +53,8 @@ export default function OpportunitiesTable() {
     if (stage) params.set('stage', stage);
     const res = await fetch(`/api/opportunities?${params}`);
     const json: ApiResponse = await res.json();
-    setData(json.data);
-    setTotal(json.total);
+    setData(json.data ?? []);
+    setTotal(json.total ?? 0);
     setLoading(false);
   }, [page, search, stage]);
 
@@ -69,60 +69,72 @@ export default function OpportunitiesTable() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Rechercher..."
+            placeholder="Rechercher une opportunité…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full rounded-md border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full rounded-xl border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
           />
         </div>
         <select
           value={stage}
           onChange={(e) => { setStage(e.target.value); setPage(1); }}
-          className="rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
         >
-          {STAGE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          {STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
 
-      <div className="bg-card border rounded-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-muted/40">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Titre</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Étape</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Valeur</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Proba.</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">Clôture</th>
+            <tr className="border-b border-gray-100 bg-gray-50/70">
+              <th className="text-left px-5 py-3.5 font-semibold text-xs text-gray-500 uppercase tracking-wider">Opportunité</th>
+              <th className="text-left px-5 py-3.5 font-semibold text-xs text-gray-500 uppercase tracking-wider hidden md:table-cell">Contact</th>
+              <th className="text-left px-5 py-3.5 font-semibold text-xs text-gray-500 uppercase tracking-wider">Étape</th>
+              <th className="text-right px-5 py-3.5 font-semibold text-xs text-gray-500 uppercase tracking-wider">Valeur</th>
+              <th className="text-left px-5 py-3.5 font-semibold text-xs text-gray-500 uppercase tracking-wider hidden lg:table-cell">Proba.</th>
+              <th className="text-left px-5 py-3.5 font-semibold text-xs text-gray-500 uppercase tracking-wider hidden xl:table-cell">Clôture</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-gray-50">
             {loading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Chargement…</td></tr>
+              <tr><td colSpan={6} className="px-5 py-12 text-center text-gray-400 text-sm">Chargement…</td></tr>
             )}
             {!loading && data.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Aucune opportunité trouvée.</td></tr>
+              <tr>
+                <td colSpan={6} className="px-5 py-12 text-center">
+                  <TrendingUp className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">Aucune opportunité trouvée.</p>
+                </td>
+              </tr>
             )}
             {!loading && data.map((opp) => {
               const badge = stageBadge(opp.stage);
               return (
-                <tr key={opp.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link href={`/opportunities/${opp.id}`} className="font-medium hover:underline">{opp.title}</Link>
-                    {opp.company && <p className="text-xs text-muted-foreground">{opp.company.name}</p>}
+                <tr key={opp.id} className="hover:bg-gray-50/70 transition-colors group">
+                  <td className="px-5 py-3.5">
+                    <Link href={`/opportunities/${opp.id}`} className="font-semibold text-gray-800 hover:text-indigo-600 transition-colors">
+                      {opp.title}
+                    </Link>
+                    {opp.company && <p className="text-xs text-gray-400 mt-0.5">{opp.company.name}</p>}
                   </td>
-                  <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
+                  <td className="px-5 py-3.5 hidden md:table-cell text-gray-500 text-sm">
                     {opp.contact ? `${opp.contact.firstName} ${opp.contact.lastName}` : '—'}
                   </td>
-                  <td className="px-4 py-3"><Badge label={badge.label} variant={badge.variant} /></td>
-                  <td className="px-4 py-3 font-semibold tabular-nums">{formatCurrency(opp.value)}</td>
-                  <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground">{opp.probability}%</td>
-                  <td className="px-4 py-3 hidden xl:table-cell text-muted-foreground">
+                  <td className="px-5 py-3.5"><Badge label={badge.label} variant={badge.variant} dot /></td>
+                  <td className="px-5 py-3.5 text-right font-bold text-gray-800 tabular-nums">{formatCurrency(opp.value)}</td>
+                  <td className="px-5 py-3.5 hidden lg:table-cell">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${opp.probability}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500">{opp.probability}%</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 hidden xl:table-cell text-gray-400 text-xs">
                     {opp.closeDate ? formatDate(opp.closeDate) : '—'}
                   </td>
                 </tr>
@@ -133,15 +145,15 @@ export default function OpportunitiesTable() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{total} opportunité{total > 1 ? 's' : ''}</span>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="p-1 rounded hover:bg-accent disabled:opacity-40">
-              <ChevronLeft className="h-4 w-4" />
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-500">{total} opportunité{total > 1 ? 's' : ''} au total</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-40 transition-all">
+              <ChevronLeft className="h-4 w-4 text-gray-500" />
             </button>
-            <span>Page {page} / {totalPages}</span>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1 rounded hover:bg-accent disabled:opacity-40">
-              <ChevronRight className="h-4 w-4" />
+            <span className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-700">{page} / {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-40 transition-all">
+              <ChevronRight className="h-4 w-4 text-gray-500" />
             </button>
           </div>
         </div>

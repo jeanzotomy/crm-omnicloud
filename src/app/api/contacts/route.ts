@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     prisma.contact.count({ where }),
   ]);
 
-  return NextResponse.json({ contacts, total, page, pages: Math.ceil(total / limit) });
+  return NextResponse.json({ data: contacts, total, page, pageSize: limit });
 }
 
 export async function POST(req: NextRequest) {

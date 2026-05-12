@@ -6,25 +6,8 @@ import Badge from '@/components/ui/Badge';
 import DeleteButton from '@/components/ui/DeleteButton';
 import { stageBadge, statusBadge } from '@/lib/badges';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { ContactStatus, OpportunityStage, CompanySize } from '@prisma/client';
-
-interface Company {
-  id: string;
-  name: string;
-  industry: string | null;
-  website: string | null;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-  city: string | null;
-  country: string | null;
-  size: CompanySize | null;
-  revenue: number | null;
-  contacts: { id: string; firstName: string; lastName: string; title: string | null; status: ContactStatus }[];
-  opportunities: { id: string; title: string; value: number; stage: OpportunityStage }[];
-  createdAt: string;
-  updatedAt: string;
-}
+import { prisma } from '@/lib/prisma';
+import type { CompanySize } from '@prisma/client';
 
 const SIZE_LABELS: Record<CompanySize, string> = {
   MICRO: 'Micro (< 10)',
@@ -33,16 +16,23 @@ const SIZE_LABELS: Record<CompanySize, string> = {
   LARGE: 'Grande (250+)',
 };
 
-async function getCompany(id: string): Promise<Company | null> {
-  const res = await fetch(`${process.env.NEXTAUTH_URL}/api/companies/${id}`, { cache: 'no-store' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Failed to fetch company');
-  return res.json();
-}
-
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const company = await getCompany(id);
+
+  const company = await prisma.company.findUnique({
+    where: { id },
+    include: {
+      contacts: {
+        select: { id: true, firstName: true, lastName: true, title: true, status: true },
+        orderBy: { lastName: 'asc' },
+      },
+      opportunities: {
+        select: { id: true, title: true, value: true, stage: true },
+        orderBy: { updatedAt: 'desc' },
+      },
+    },
+  });
+
   if (!company) notFound();
 
   const pipelineValue = company.opportunities.reduce((sum, o) => sum + o.value, 0);
@@ -79,7 +69,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               <Info label="Chiffre d'affaires" value={company.revenue ? formatCurrency(company.revenue) : undefined} />
               <Info label="Localisation" value={[company.city, company.country].filter(Boolean).join(', ') || undefined} />
               <Info label="Pipeline" value={<span className="font-semibold">{formatCurrency(pipelineValue)}</span>} />
-              <Info label="Créé le" value={formatDate(company.createdAt)} />
+              <Info label="Créé le" value={formatDate(company.createdAt.toISOString())} />
             </dl>
           </div>
 

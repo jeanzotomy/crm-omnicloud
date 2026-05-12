@@ -2,32 +2,12 @@ import { notFound } from 'next/navigation';
 import { Building2 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import CompanyForm from '@/components/companies/CompanyForm';
-import type { CompanySize } from '@prisma/client';
-
-interface Company {
-  id: string;
-  name: string;
-  industry: string | null;
-  website: string | null;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-  city: string | null;
-  country: string | null;
-  size: CompanySize | null;
-  revenue: number | null;
-}
-
-async function getCompany(id: string): Promise<Company | null> {
-  const res = await fetch(`${process.env.NEXTAUTH_URL}/api/companies/${id}`, { cache: 'no-store' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Failed to fetch');
-  return res.json();
-}
+import { prisma } from '@/lib/prisma';
 
 export default async function EditCompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const company = await getCompany(id);
+
+  const company = await prisma.company.findUnique({ where: { id } });
   if (!company) notFound();
 
   return (
