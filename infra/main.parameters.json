@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "appName": { "value": "crm" },
+    "location": { "value": "canadacentral" },
+    "dbAdminUser": { "value": "crmadmin" },
+    "dbAdminPassword": { "value": "REPLACE_WITH_SECURE_PASSWORD" },
+    "nextAuthSecret": { "value": "REPLACE_WITH_RANDOM_SECRET_32CHARS" },
+    "imageTag": { "value": "latest" }
+  }
+}

@@ -1,0 +1,11 @@
+.next/
+node_modules/
+.env
+.env.local
+.env.production.local
+dist/
+out/
+.DS_Store
+*.log
+*.pem
+prisma/migrations/

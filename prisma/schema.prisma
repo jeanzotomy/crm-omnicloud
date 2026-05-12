@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth (NextAuth) ─────────────────────────────────────────────────
+model User {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String        @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          UserRole      @default(AGENT)
+  accounts      Account[]
+  sessions      Session[]
+  opportunities Opportunity[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── CRM Core ────────────────────────────────────────────────────────
+model Company {
+  id            String        @id @default(cuid())
+  name          String
+  industry      String?
+  website       String?
+  phone         String?
+  email         String?
+  address       String?
+  city          String?
+  country       String?
+  size          CompanySize?
+  revenue       Float?
+  notes         String?
+  contacts      Contact[]
+  opportunities Opportunity[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([name])
+}
+
+model Contact {
+  id            String          @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String?         @unique
+  phone         String?
+  title         String?
+  status        ContactStatus   @default(LEAD)
+  notes         String?
+  companyId     String?
+  company       Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  opportunities Opportunity[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+  @@index([email])
+}
+
+model Opportunity {
+  id           String            @id @default(cuid())
+  title        String
+  value        Float             @default(0)
+  stage        OpportunityStage  @default(LEAD)
+  probability  Int               @default(0)
+  closeDate    DateTime?
+  notes        String?
+  contactId    String?
+  contact      Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyId    String?
+  company      Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  assignedTo   User?             @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([stage])
+  @@index([contactId])
+  @@index([companyId])
+  @@index([assignedToId])
+}
+
+// ── Enums ───────────────────────────────────────────────────────────
+enum UserRole {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum ContactStatus {
+  LEAD
+  PROSPECT
+  CLIENT
+  INACTIVE
+}
+
+enum CompanySize {
+  MICRO
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum OpportunityStage {
+  LEAD
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
