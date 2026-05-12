@@ -1,0 +1,144 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  acrLoginServer: acrcrmomnicloud.azurecr.io
+  imageName: crm/app
+  resourceGroup: rg-crm-omnicloud
+  appName: crm-prod
+  imageTag: $(Build.SourceVersion)
+
+stages:
+  # ── 1. Build & Test ────────────────────────────────────────────────
+  - stage: Build
+    displayName: Build & Test
+    jobs:
+      - job: BuildTest
+        displayName: npm ci / tsc / test / next build
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '22.x'
+            displayName: Set up Node 22
+
+          - script: npm ci
+            displayName: Install dependencies
+
+          - script: npx prisma generate
+            displayName: Generate Prisma client
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+
+          - script: npx tsc --noEmit
+            displayName: Type check
+
+          - script: npm test -- --run
+            displayName: Run unit tests
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+              NEXTAUTH_SECRET: test-secret
+              NEXTAUTH_URL: http://localhost:3000
+
+          - script: npm run build
+            displayName: Next.js build
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+              DIRECT_URL: $(DIRECT_URL)
+              NEXTAUTH_SECRET: $(NEXTAUTH_SECRET)
+              NEXTAUTH_URL: $(NEXTAUTH_URL)
+              TWILIO_ACCOUNT_SID: $(TWILIO_ACCOUNT_SID)
+              TWILIO_AUTH_TOKEN: $(TWILIO_AUTH_TOKEN)
+              TWILIO_PHONE_NUMBER: $(TWILIO_PHONE_NUMBER)
+              TWILIO_WEBHOOK_URL: $(TWILIO_WEBHOOK_URL)
+              RESEND_API_KEY: $(RESEND_API_KEY)
+              EMAIL_FROM: support@cloudmature.com
+              AZURE_STORAGE_ACCOUNT_NAME: crmomnicloud
+              AZURE_STORAGE_ACCOUNT_KEY: $(AZURE_STORAGE_ACCOUNT_KEY)
+              AZURE_STORAGE_CONTAINER: ticket-attachments
+              AZURE_AD_CLIENT_ID: $(AZURE_AD_CLIENT_ID)
+              AZURE_AD_CLIENT_SECRET: $(AZURE_AD_CLIENT_SECRET)
+              AZURE_AD_TENANT_ID: $(AZURE_AD_TENANT_ID)
+              DEFAULT_ORG_ID: org-demo
+
+  # ── 2. Docker Build & Push ─────────────────────────────────────────
+  - stage: Docker
+    displayName: Docker Push to ACR
+    dependsOn: Build
+    jobs:
+      - job: DockerPush
+        displayName: Build & push image
+        steps:
+          - task: Docker@2
+            displayName: Login to ACR
+            inputs:
+              command: login
+              containerRegistry: ACR-ServiceConnection
+
+          - task: Docker@2
+            displayName: Build and push
+            inputs:
+              command: buildAndPush
+              containerRegistry: ACR-ServiceConnection
+              repository: $(imageName)
+              tags: |
+                $(imageTag)
+                latest
+
+  # ── 3. Deploy to Azure Container Apps ─────────────────────────────
+  - stage: Deploy
+    displayName: Deploy to Azure
+    dependsOn: Docker
+    jobs:
+      - deployment: DeployACA
+        displayName: Bicep deploy to ACA
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureCLI@2
+                  displayName: Deploy Bicep
+                  inputs:
+                    azureSubscription: Azure-ServiceConnection
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az deployment group create \
+                        --resource-group $(resourceGroup) \
+                        --template-file infra/main.bicep \
+                        --parameters @infra/main.parameters.json \
+                          containerImage=$(acrLoginServer)/$(imageName):$(imageTag) \
+                          databaseUrl="$(DATABASE_URL)" \
+                          directUrl="$(DIRECT_URL)" \
+                          nextauthSecret="$(NEXTAUTH_SECRET)" \
+                          nextauthUrl="$(NEXTAUTH_URL)" \
+                          twilioAccountSid="$(TWILIO_ACCOUNT_SID)" \
+                          twilioAuthToken="$(TWILIO_AUTH_TOKEN)" \
+                          resendApiKey="$(RESEND_API_KEY)" \
+                          azureStorageAccountKey="$(AZURE_STORAGE_ACCOUNT_KEY)" \
+                          azureAdClientSecret="$(AZURE_AD_CLIENT_SECRET)" \
+                          emailWebhookSecret="$(EMAIL_WEBHOOK_SECRET)"
+
+                - task: AzureCLI@2
+                  displayName: Print deployed URL
+                  inputs:
+                    azureSubscription: Azure-ServiceConnection
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      FQDN=$(az containerapp show \
+                        --name $(appName) \
+                        --resource-group $(resourceGroup) \
+                        --query "properties.configuration.ingress.fqdn" \
+                        --output tsv 2>/dev/null || echo "")
+                      if [ -n "$FQDN" ]; then
+                        echo "##vso[task.setvariable variable=AppFqdn]$FQDN"
+                        echo "✅ App deployed at: https://$FQDN"
+                      fi
