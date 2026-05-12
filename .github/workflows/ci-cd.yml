@@ -1,4 +1,4 @@
-name: CI/CD — CRM OmniCloud
+name: CI/CD - CRM OmniCloud
 
 on:
   push:
@@ -71,11 +71,10 @@ jobs:
 
   # ── Deploy to Dev ──────────────────────────────────────────────────
   deploy-dev:
-    name: Deploy → Dev
+    name: Deploy - Dev
     runs-on: ubuntu-latest
     needs: docker
     if: github.ref == 'refs/heads/develop'
-    environment: dev
     steps:
       - uses: actions/checkout@v4
 
@@ -114,11 +113,10 @@ jobs:
 
   # ── Deploy to Production ───────────────────────────────────────────
   deploy-prod:
-    name: Deploy → Production
+    name: Deploy - Production
     runs-on: ubuntu-latest
     needs: docker
     if: github.ref == 'refs/heads/main'
-    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -130,14 +128,14 @@ jobs:
       - name: Create resource group if needed
         run: |
           az group create \
-            --name rg-crm-prod \
+            --name rg-crm-omnicloud \
             --location canadacentral \
             --tags product=crm-omnicloud env=prod || true
 
       - name: Deploy Bicep infrastructure
         uses: azure/arm-deploy@v2
         with:
-          resourceGroupName: rg-crm-prod
+          resourceGroupName: rg-crm-omnicloud
           template: ./infra/main.bicep
           parameters: >
             appName=crm-prod
@@ -159,13 +157,13 @@ jobs:
         run: |
           az containerapp show \
             --name crm-prod \
-            --resource-group rg-crm-prod \
+            --resource-group rg-crm-omnicloud \
             --query "properties.latestRevisionName" -o tsv
 
       - name: Output app URL
         run: |
           URL=$(az containerapp show \
             --name crm-prod \
-            --resource-group rg-crm-prod \
+            --resource-group rg-crm-omnicloud \
             --query "properties.configuration.ingress.fqdn" -o tsv)
           echo "App deployed at: https://$URL"
