@@ -1,9 +1,141 @@
-name: test
+name: CI/CD — CRM Omnicloud
+
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+
+env:
+  ACR_NAME: acrcrmomnicloud
+  ACR_LOGIN_SERVER: acrcrmomnicloud.azurecr.io
+  IMAGE_NAME: crm/app
+  RESOURCE_GROUP: rg-crm-omnicloud
+  APP_NAME: crm-prod
+
 jobs:
-  test:
+  # ── 1. Build & Test ──────────────────────────────────────────────────
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
-      - run: echo hello
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test -- --run
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_SECRET: test-secret
+          NEXTAUTH_URL: http://localhost:3000
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
+          TWILIO_WEBHOOK_URL: ${{ secrets.TWILIO_WEBHOOK_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: support@cloudmature.com
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          AZURE_STORAGE_CONTAINER: ticket-attachments
+          AZURE_AD_CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID }}
+          AZURE_AD_CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          DEFAULT_ORG_ID: org-demo
+
+  # ── 2. Docker Build & Push ───────────────────────────────────────────
+  docker:
+    name: Docker Push
+    runs-on: ubuntu-latest
+    needs: build
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_ref: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            NEXTAUTH_URL=https://placeholder.azurecontainerapps.io
+
+  # ── 3. Deploy to Azure Container Apps ───────────────────────────────
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: docker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Bicep infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.RESOURCE_GROUP }}
+          template: ./infra/main.bicep
+          parameters: >
+            ./infra/main.parameters.json
+            containerImage=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            databaseUrl=${{ secrets.DATABASE_URL }}
+            directUrl=${{ secrets.DIRECT_URL }}
+            nextauthSecret=${{ secrets.NEXTAUTH_SECRET }}
+            nextauthUrl=${{ secrets.NEXTAUTH_URL }}
+            twilioAccountSid=${{ secrets.TWILIO_ACCOUNT_SID }}
+            twilioAuthToken=${{ secrets.TWILIO_AUTH_TOKEN }}
+            resendApiKey=${{ secrets.RESEND_API_KEY }}
+            azureStorageAccountKey=${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+            azureAdClientSecret=${{ secrets.AZURE_AD_CLIENT_SECRET }}
+            emailWebhookSecret=${{ secrets.EMAIL_WEBHOOK_SECRET }}
+          failOnStdErr: false
+
+      - name: Get deployed FQDN
+        id: fqdn
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv 2>/dev/null || echo "")
+          echo "fqdn=${FQDN}" >> $GITHUB_OUTPUT
+          if [ -n "$FQDN" ]; then
+            echo "App deployed at: https://${FQDN}"
+          fi
