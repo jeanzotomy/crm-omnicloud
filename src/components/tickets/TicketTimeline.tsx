@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { MessageSquare, Activity, Lock, Send } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
@@ -60,10 +60,10 @@ export default function TicketTimeline({ ticketId, comments: initialComments, ac
   const [isInternal, setIsInternal] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const timeline: TimelineItem[] = [
+  const timeline = useMemo<TimelineItem[]>(() => [
     ...comments.map((c) => ({ kind: 'comment' as const, data: c, date: c.createdAt })),
     ...activities.filter((a) => a.type !== 'comment_added').map((a) => ({ kind: 'activity' as const, data: a, date: a.createdAt })),
-  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [comments, activities]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

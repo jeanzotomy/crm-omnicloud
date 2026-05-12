@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { TicketStatus, TicketPriority, TicketType, TicketSource } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
-import { TicketStatus, TicketPriority, TicketType, TicketSource } from '@prisma/client';
+import { parsePaginationParams } from '@/lib/pagination';
+import { sendTicketCreatedToAssignee, sendTicketCreatedToContact } from '@/lib/email';
+import { PRIORITY_LABELS } from '@/lib/labels';
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const page = Math.max(1, Number(sp.get('page') ?? 1));
-  const pageSize = Math.min(50, Math.max(1, Number(sp.get('pageSize') ?? 20)));
+  const { page, pageSize } = parsePaginationParams(sp);
   const search = sp.get('search') ?? '';
   const status = sp.get('status') as TicketStatus | null;
   const priority = sp.get('priority') as TicketPriority | null;
@@ -96,6 +98,24 @@ export async function POST(req: NextRequest) {
   await prisma.ticketActivity.create({
     data: { ticketId: ticket.id, userId: session.user.id, type: 'created', meta: {} },
   });
+
+  // Fire-and-forget email notifications (non-blocking)
+  const emailCtx = {
+    ticketNumber: ticket.number,
+    ticketId: ticket.id,
+    ticketTitle: ticket.title,
+    priority: PRIORITY_LABELS[ticket.priority],
+  };
+  if (assigneeId) {
+    const assignee = await prisma.user.findUnique({ where: { id: assigneeId }, select: { name: true, email: true } });
+    if (assignee) void sendTicketCreatedToAssignee(emailCtx, assignee);
+  }
+  if (contactId) {
+    const contact = await prisma.contact.findUnique({ where: { id: contactId }, select: { firstName: true, lastName: true, email: true } });
+    if (contact?.email) {
+      void sendTicketCreatedToContact(emailCtx, { name: `${contact.firstName} ${contact.lastName}`, email: contact.email });
+    }
+  }
 
   return NextResponse.json(ticket, { status: 201 });
 }

@@ -1,0 +1,14 @@
+name: crm-omnicloud
+metadata:
+  template: crm-omnicloud@0.0.1
+services:
+  crm:
+    project: .
+    host: containerapp
+    language: js
+    docker:
+      path: ./Dockerfile
+infra:
+  provider: bicep
+  path: infra
+  module: main

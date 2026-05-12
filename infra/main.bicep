@@ -1,148 +1,97 @@
-targetScope = 'resourceGroup'
-
-@description('Application name used as prefix for all resources')
-param appName string = 'crm'
+@description('Base name — used as prefix for all resources (e.g. "crm-prod")')
+param appName string = 'crm-prod'
 
 @description('Azure region')
 param location string = resourceGroup().location
 
-@description('Container image tag')
-param imageTag string = 'latest'
+@description('Container image reference — set by CI/CD')
+param containerImage string = 'mcr.microsoft.com/azuredocs/aci-helloworld:latest'
 
-@description('PostgreSQL admin username')
-param dbAdminUser string = 'crmadmin'
+@description('Number of CPU cores')
+param cpuCores string = '0.5'
 
+@description('Memory')
+param memorySize string = '1Gi'
+
+@description('Min replicas')
+param minReplicas int = 1
+
+@description('Max replicas')
+param maxReplicas int = 3
+
+// ── Secrets (injected by CI/CD or azd, never committed) ──────────────
 @secure()
-@description('PostgreSQL admin password')
-param dbAdminPassword string
-
+param databaseUrl string
 @secure()
-@description('NextAuth secret')
-param nextAuthSecret string
+param directUrl string
+@secure()
+param nextauthSecret string
+param nextauthUrl string
+@secure()
+param twilioAccountSid string
+@secure()
+param twilioAuthToken string
+param twilioPhoneNumber string = '+16413484830'
+param twilioWebhookUrl string = ''
+@secure()
+param resendApiKey string
+param emailFrom string = 'support@cloudmature.com'
+param azureStorageAccountName string = 'crmomnicloud'
+@secure()
+param azureStorageAccountKey string
+param azureStorageContainer string = 'ticket-attachments'
+param azureAdClientId string = '83802945-b2c2-4fd5-ad44-cf0e41fb52e9'
+@secure()
+param azureAdClientSecret string
+param azureAdTenantId string = '9fe00940-ea78-4e36-906f-39fc7636e703'
+param defaultOrgId string = 'org-demo'
+@secure()
+param emailWebhookSecret string = ''
 
-var tags = { app: appName, env: 'production' }
-
-// --- Log Analytics ---
-resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: '${appName}-logs'
-  location: location
-  tags: tags
-  properties: {
-    sku: { name: 'PerGB2018' }
-    retentionInDays: 30
+// ── Monitoring ────────────────────────────────────────────────────────
+module monitoring 'modules/monitoring.bicep' = {
+  name: 'monitoring'
+  params: {
+    name: appName
+    location: location
   }
 }
 
-// --- Container Apps Environment ---
-resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: '${appName}-env'
-  location: location
-  tags: tags
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logWorkspace.properties.customerId
-        sharedKey: logWorkspace.listKeys().primarySharedKey
-      }
-    }
+// ── Container App ─────────────────────────────────────────────────────
+module containerApp 'modules/container-app.bicep' = {
+  name: 'container-app'
+  params: {
+    name: appName
+    location: location
+    containerImage: containerImage
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
+    cpuCores: cpuCores
+    memorySize: memorySize
+    minReplicas: minReplicas
+    maxReplicas: maxReplicas
+    databaseUrl: databaseUrl
+    directUrl: directUrl
+    nextauthSecret: nextauthSecret
+    nextauthUrl: nextauthUrl
+    twilioAccountSid: twilioAccountSid
+    twilioAuthToken: twilioAuthToken
+    twilioPhoneNumber: twilioPhoneNumber
+    twilioWebhookUrl: twilioWebhookUrl
+    resendApiKey: resendApiKey
+    emailFrom: emailFrom
+    azureStorageAccountName: azureStorageAccountName
+    azureStorageAccountKey: azureStorageAccountKey
+    azureStorageContainer: azureStorageContainer
+    azureAdClientId: azureAdClientId
+    azureAdClientSecret: azureAdClientSecret
+    azureAdTenantId: azureAdTenantId
+    defaultOrgId: defaultOrgId
+    emailWebhookSecret: emailWebhookSecret
   }
 }
 
-// --- PostgreSQL Flexible Server ---
-resource pgServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview' = {
-  name: '${appName}-pg'
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
-  }
-  properties: {
-    administratorLogin: dbAdminUser
-    administratorLoginPassword: dbAdminPassword
-    version: '16'
-    storage: { storageSizeGB: 32 }
-    backup: { backupRetentionDays: 7, geoRedundantBackup: 'Disabled' }
-    highAvailability: { mode: 'Disabled' }
-  }
-}
-
-resource pgFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = {
-  parent: pgServer
-  name: 'allow-azure-services'
-  properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
-  }
-}
-
-resource pgDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-12-01-preview' = {
-  parent: pgServer
-  name: 'crm'
-  properties: {
-    charset: 'UTF8'
-    collation: 'en_US.utf8'
-  }
-}
-
-var dbUrl = 'postgresql://${dbAdminUser}:${dbAdminPassword}@${pgServer.properties.fullyQualifiedDomainName}:5432/crm?sslmode=require'
-
-// --- Container Registry ---
-resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
-  name: '${replace(appName, '-', '')}registry'
-  location: location
-  tags: tags
-  sku: { name: 'Basic' }
-  properties: { adminUserEnabled: true }
-}
-
-// --- Container App ---
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: appName
-  location: location
-  tags: tags
-  properties: {
-    managedEnvironmentId: caEnv.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 3000
-        transport: 'http'
-      }
-      registries: [
-        {
-          server: acr.properties.loginServer
-          username: acr.listCredentials().username
-          passwordSecretRef: 'acr-password'
-        }
-      ]
-      secrets: [
-        { name: 'acr-password', value: acr.listCredentials().passwords[0].value }
-        { name: 'database-url', value: dbUrl }
-        { name: 'nextauth-secret', value: nextAuthSecret }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: appName
-          image: '${acr.properties.loginServer}/${appName}:${imageTag}'
-          resources: { cpu: json('0.5'), memory: '1Gi' }
-          env: [
-            { name: 'DATABASE_URL', secretRef: 'database-url' }
-            { name: 'NEXTAUTH_SECRET', secretRef: 'nextauth-secret' }
-            { name: 'NEXTAUTH_URL', value: 'https://${appName}.${caEnv.properties.defaultDomain}' }
-            { name: 'NODE_ENV', value: 'production' }
-          ]
-        }
-      ]
-      scale: { minReplicas: 1, maxReplicas: 3 }
-    }
-  }
-  dependsOn: [pgDatabase]
-}
-
-output appUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output acrLoginServer string = acr.properties.loginServer
-output pgHost string = pgServer.properties.fullyQualifiedDomainName
+// ── Outputs ───────────────────────────────────────────────────────────
+output appUrl string = containerApp.outputs.containerAppUrl
+output fqdn string = containerApp.outputs.fqdn
+output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString

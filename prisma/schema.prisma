@@ -10,28 +10,30 @@ datasource db {
 
 // ── Auth (NextAuth) ─────────────────────────────────────────────────
 model User {
-  id             String        @id @default(cuid())
-  name           String?
-  email          String        @unique
-  emailVerified  DateTime?
-  image          String?
-  password       String?
-  role           UserRole      @default(AGENT)
-  departmentId   String?
-  department     Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  teamId         String?
-  team           Team?         @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
-  accounts       Account[]
-  sessions       Session[]
-  opportunities  Opportunity[]
-  assignedTickets Ticket[]     @relation("TicketAssignee")
-  createdTickets  Ticket[]     @relation("TicketCreator")
-  ticketComments  TicketComment[]
+  id               String               @id @default(cuid())
+  name             String?
+  email            String               @unique
+  emailVerified    DateTime?
+  image            String?
+  password         String?
+  role             UserRole             @default(AGENT)
+  departmentId     String?
+  department       Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  teamId           String?
+  team             Team?                @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  accounts         Account[]
+  sessions         Session[]
+  opportunities    Opportunity[]
+  assignedTickets  Ticket[]             @relation("TicketAssignee")
+  createdTickets   Ticket[]             @relation("TicketCreator")
+  ticketComments   TicketComment[]
   ticketActivities TicketActivity[]
   knowledgeArticles KnowledgeArticle[]
-  leadOf         Team[]        @relation("TeamLead")
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  leadOf           Team[]               @relation("TeamLead")
+  orgMemberships   OrganizationMember[]
+  ticketAttachments TicketAttachment[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   @@index([departmentId])
   @@index([teamId])
@@ -62,7 +64,61 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ── Organization ─────────────────────────────────────────────────────
+// ── Multi-tenant ─────────────────────────────────────────────────────
+model Organization {
+  id           String               @id @default(cuid())
+  name         String
+  slug         String               @unique
+  plan         OrgPlan              @default(FREE)
+  members      OrganizationMember[]
+  tickets      Ticket[]
+  contacts     Contact[]
+  companies    Company[]
+  opportunities Opportunity[]
+  interactions OmnichannelInteraction[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MemberRole   @default(AGENT)
+  joinedAt       DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+// ── Omnichannel ───────────────────────────────────────────────────────
+model OmnichannelInteraction {
+  id             String               @id @default(cuid())
+  channel        ChannelType
+  direction      InteractionDirection
+  externalId     String?
+  from           String
+  to             String
+  body           String
+  attachments    Json                 @default("[]")
+  ticketId       String?
+  ticket         Ticket?              @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime             @default(now())
+
+  @@index([organizationId, channel])
+  @@index([ticketId])
+  @@index([externalId])
+  @@map("omnichannel_interactions")
+}
+
+// ── Internal structure ────────────────────────────────────────────────
 model Department {
   id        String       @id @default(cuid())
   name      String
@@ -141,8 +197,17 @@ model Ticket {
   createdById    String
   createdBy      User            @relation("TicketCreator", fields: [createdById], references: [id])
 
+  parentTicketId String?
+  parentTicket   Ticket?         @relation("TicketChildren", fields: [parentTicketId], references: [id], onDelete: SetNull)
+  childTickets   Ticket[]        @relation("TicketChildren")
+
+  organizationId String?
+  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
   comments       TicketComment[]
   activities     TicketActivity[]
+  interactions   OmnichannelInteraction[]
+  attachments    TicketAttachment[]
 
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -155,7 +220,25 @@ model Ticket {
   @@index([departmentId])
   @@index([contactId])
   @@index([companyId])
+  @@index([organizationId])
+  @@index([parentTicketId])
   @@index([createdAt])
+}
+
+model TicketAttachment {
+  id           String   @id @default(cuid())
+  ticketId     String
+  ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  blobUrl      String
+  createdAt    DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
 }
 
 model TicketComment {
@@ -222,69 +305,78 @@ model KnowledgeArticle {
 
 // ── CRM Core ──────────────────────────────────────────────────────────
 model Company {
-  id            String        @id @default(cuid())
-  name          String
-  industry      String?
-  website       String?
-  phone         String?
-  email         String?
-  address       String?
-  city          String?
-  country       String?
-  size          CompanySize?
-  revenue       Float?
-  notes         String?
-  contacts      Contact[]
-  opportunities Opportunity[]
-  tickets       Ticket[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  name           String
+  industry       String?
+  website        String?
+  phone          String?
+  email          String?
+  address        String?
+  city           String?
+  country        String?
+  size           CompanySize?
+  revenue        Float?
+  notes          String?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  contacts       Contact[]
+  opportunities  Opportunity[]
+  tickets        Ticket[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([name])
+  @@index([organizationId])
 }
 
 model Contact {
-  id            String        @id @default(cuid())
-  firstName     String
-  lastName      String
-  email         String?       @unique
-  phone         String?
-  title         String?
-  status        ContactStatus @default(LEAD)
-  notes         String?
-  companyId     String?
-  company       Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  opportunities Opportunity[]
-  tickets       Ticket[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String?       @unique
+  phone          String?
+  title          String?
+  status         ContactStatus @default(LEAD)
+  notes          String?
+  companyId      String?
+  company        Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  opportunities  Opportunity[]
+  tickets        Ticket[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([companyId])
+  @@index([organizationId])
   @@index([status])
   @@index([email])
 }
 
 model Opportunity {
-  id           String           @id @default(cuid())
-  title        String
-  value        Float            @default(0)
-  stage        OpportunityStage @default(LEAD)
-  probability  Int              @default(0)
-  closeDate    DateTime?
-  notes        String?
-  contactId    String?
-  contact      Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  companyId    String?
-  company      Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  assignedToId String?
-  assignedTo   User?            @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  title          String
+  value          Float            @default(0)
+  stage          OpportunityStage @default(LEAD)
+  probability    Int              @default(0)
+  closeDate      DateTime?
+  notes          String?
+  contactId      String?
+  contact        Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyId      String?
+  company        Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedToId   String?
+  assignedTo     User?            @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  organizationId String?
+  organization   Organization?    @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([stage])
   @@index([contactId])
   @@index([companyId])
   @@index([assignedToId])
+  @@index([organizationId])
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────
@@ -324,6 +416,39 @@ enum TicketSource {
   PHONE
   CHAT
   API
+  SMS
+  TEAMS
+  WHATSAPP
+}
+
+enum OrgPlan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+enum ChannelType {
+  EMAIL
+  SMS
+  TEAMS
+  WHATSAPP
+  VOICE
+  CHAT
+  PORTAL
+}
+
+enum InteractionDirection {
+  INBOUND
+  OUTBOUND
 }
 
 enum KnowledgeStatus {

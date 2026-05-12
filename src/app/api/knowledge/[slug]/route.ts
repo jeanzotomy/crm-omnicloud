@@ -17,8 +17,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
   if (!article) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  await prisma.knowledgeArticle.update({ where: { slug }, data: { views: { increment: 1 } } });
-
   return NextResponse.json(article);
 }
 

@@ -9,6 +9,7 @@ import {
   TicketType,
   TicketSource,
   KnowledgeStatus,
+  MemberRole,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -16,6 +17,13 @@ const prisma = new PrismaClient();
 
 async function main() {
   const pw = await bcrypt.hash('admin1234', 10);
+
+  // ── Organization ──────────────────────────────────────────────────
+  const org = await prisma.organization.upsert({
+    where: { id: 'org-demo' },
+    update: {},
+    create: { id: 'org-demo', name: 'Organisation Démo', slug: 'demo', plan: 'PROFESSIONAL' },
+  });
 
   // ── SLA Policies ──────────────────────────────────────────────────
   const slaCritical = await prisma.sLAPolicy.upsert({
@@ -87,6 +95,20 @@ async function main() {
     update: {},
     create: { email: 'marc@crm.dev', name: 'Marc Leroy', password: pw, role: UserRole.AGENT, departmentId: deptIT.id },
   });
+
+  // ── Org memberships ───────────────────────────────────────────────
+  for (const { userId, role } of [
+    { userId: admin.id, role: MemberRole.OWNER },
+    { userId: clara.id, role: MemberRole.MANAGER },
+    { userId: sophie.id, role: MemberRole.AGENT },
+    { userId: marc.id, role: MemberRole.AGENT },
+  ]) {
+    await prisma.organizationMember.upsert({
+      where: { organizationId_userId: { organizationId: org.id, userId } },
+      update: {},
+      create: { organizationId: org.id, userId, role },
+    });
+  }
 
   // ── Teams ─────────────────────────────────────────────────────────
   const teamSup = await prisma.team.upsert({

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketSource } from '@prisma/client';
+import type { Ticket } from '@prisma/client';
+import { TICKET_STATUS_LABELS as STATUS_LABELS, PRIORITY_LABELS, TYPE_LABELS, SOURCE_LABELS } from '@/lib/labels';
 
 interface Agent { id: string; name: string | null }
 interface Team { id: string; name: string }
@@ -20,20 +21,6 @@ interface Props {
   companies: Company[];
   slas: SLA[];
 }
-
-const STATUS_LABELS: Record<TicketStatus, string> = {
-  NEW: 'Nouveau', OPEN: 'Ouvert', PENDING: 'En attente',
-  ON_HOLD: 'Suspendu', RESOLVED: 'Résolu', CLOSED: 'Fermé',
-};
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  CRITICAL: 'Critique', HIGH: 'Haute', MEDIUM: 'Moyenne', LOW: 'Basse',
-};
-const TYPE_LABELS: Record<TicketType, string> = {
-  INCIDENT: 'Incident', SERVICE_REQUEST: 'Demande de service', PROBLEM: 'Problème', CHANGE: 'Changement',
-};
-const SOURCE_LABELS: Record<TicketSource, string> = {
-  PORTAL: 'Portail', EMAIL: 'Email', PHONE: 'Téléphone', CHAT: 'Chat', API: 'API',
-};
 
 export default function TicketEditForm({ ticket, agents, teams, departments, contacts, companies, slas }: Props) {
   const router = useRouter();

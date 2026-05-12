@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { TicketStatus } from '@prisma/client';
+import { sendTicketStatusChanged, sendTicketAssigned } from '@/lib/email';
+import { PRIORITY_LABELS, TICKET_STATUS_LABELS } from '@/lib/labels';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -39,7 +41,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
 
   const body = await req.json();
-  const old = await prisma.ticket.findUnique({ where: { id }, select: { status: true, assigneeId: true } });
+  const old = await prisma.ticket.findUnique({
+    where: { id },
+    select: { status: true, assigneeId: true, title: true, number: true, priority: true },
+  });
   if (!old) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const data: Record<string, unknown> = { ...body };
@@ -62,6 +67,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await prisma.ticketActivity.createMany({
       data: activities.map((a) => ({ ticketId: id, userId: session.user!.id!, ...a })),
     });
+  }
+
+  // Fire-and-forget email notifications
+  const emailCtx = {
+    ticketNumber: old.number,
+    ticketId: id,
+    ticketTitle: old.title,
+    priority: PRIORITY_LABELS[old.priority],
+  };
+  const assigneeId = ticket.assigneeId ?? body.assigneeId;
+  if (assigneeId) {
+    const assignee = await prisma.user.findUnique({ where: { id: assigneeId }, select: { name: true, email: true } });
+    if (assignee) {
+      if (body.status && body.status !== old.status) {
+        void sendTicketStatusChanged(
+          { ...emailCtx, oldStatus: TICKET_STATUS_LABELS[old.status], newStatus: TICKET_STATUS_LABELS[body.status as TicketStatus] },
+          assignee,
+        );
+      } else if (body.assigneeId && body.assigneeId !== old.assigneeId) {
+        void sendTicketAssigned(emailCtx, assignee);
+      }
+    }
   }
 
   return NextResponse.json(ticket);

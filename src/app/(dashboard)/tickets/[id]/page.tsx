@@ -3,11 +3,26 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft, Clock, User, Building2, Tag, Calendar, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Clock, User, Building2, Tag, Calendar, AlertCircle, CheckCircle2, MailOpen, Phone } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { ticketStatusBadge, ticketPriorityBadge, ticketTypeBadge } from '@/lib/badges';
 import { formatDate } from '@/lib/utils';
+import { TicketStatus } from '@prisma/client';
 import TicketTimeline from '@/components/tickets/TicketTimeline';
+
+const PRIORITY_GRADIENT: Record<string, string> = {
+  CRITICAL: 'from-red-600 to-red-500',
+  HIGH: 'from-orange-500 to-orange-400',
+  MEDIUM: 'from-indigo-600 to-indigo-500',
+  LOW: 'from-gray-500 to-gray-400',
+};
+
+const PRIORITY_HEADER_ACCENT: Record<string, string> = {
+  CRITICAL: 'border-b-2 border-red-500',
+  HIGH: 'border-b-2 border-orange-400',
+  MEDIUM: 'border-b-2 border-indigo-500',
+  LOW: 'border-b border-gray-100',
+};
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -40,49 +55,101 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
   const sb = ticketStatusBadge(ticket.status);
   const pb = ticketPriorityBadge(ticket.priority);
   const tb = ticketTypeBadge(ticket.type);
-  const isOverdue = ticket.dueAt && new Date(ticket.dueAt) < new Date() && !['RESOLVED', 'CLOSED'].includes(ticket.status);
+  const isOverdue = ticket.dueAt && new Date(ticket.dueAt) < new Date()
+    && ticket.status !== TicketStatus.RESOLVED
+    && ticket.status !== TicketStatus.CLOSED;
+
+  // SLA progress
+  const slaProgress = ticket.slaPolicy && ticket.dueAt
+    ? Math.min(100, Math.round(
+        ((Date.now() - ticket.createdAt.getTime()) /
+         (ticket.dueAt.getTime() - ticket.createdAt.getTime())) * 100
+      ))
+    : null;
+
+  const isClosed = ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CLOSED;
 
   return (
     <div>
       {/* Header */}
-      <div className="px-8 py-5 bg-white border-b border-gray-100">
+      <div className={`px-8 py-5 bg-white ${PRIORITY_HEADER_ACCENT[ticket.priority]}`}>
         <div className="flex items-center gap-3 mb-3">
           <Link href="/tickets" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <span className="font-mono text-sm text-gray-400">{ticket.number}</span>
-          {ticket.slaBreached && (
-            <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-lg">
-              <AlertCircle className="h-3.5 w-3.5" /> SLA dépassé
-            </span>
-          )}
-        </div>
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-xl font-bold text-gray-900 flex-1">{ticket.title}</h1>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">{ticket.number}</span>
+            {ticket.slaBreached && !isClosed && (
+              <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 border border-red-100 px-2.5 py-1 rounded-lg">
+                <AlertCircle className="h-3.5 w-3.5" /> SLA dépassé
+              </span>
+            )}
+            {isClosed && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Clôturé
+              </span>
+            )}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
             <Badge label={tb.label} variant={tb.variant} />
             <Badge label={pb.label} variant={pb.variant} />
             <Badge label={sb.label} variant={sb.variant} dot />
-            <Link
-              href={`/tickets/${ticket.id}/edit`}
-              className="rounded-xl border border-gray-200 text-gray-600 px-4 py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
-            >
-              Modifier
-            </Link>
           </div>
         </div>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-xl font-bold text-gray-900 flex-1 leading-snug">{ticket.title}</h1>
+          <Link
+            href={`/tickets/${ticket.id}/edit`}
+            className="shrink-0 rounded-xl border border-gray-200 text-gray-600 px-4 py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
+          >
+            Modifier
+          </Link>
+        </div>
+
+        {/* SLA bar */}
+        {slaProgress !== null && !isClosed && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                SLA — {ticket.slaPolicy?.name}
+              </span>
+              <span className={`text-[11px] font-bold ${isOverdue ? 'text-red-600' : slaProgress > 75 ? 'text-amber-600' : 'text-gray-500'}`}>
+                {isOverdue ? 'Dépassé' : `${slaProgress}%`}
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isOverdue ? 'bg-red-500' : slaProgress > 75 ? 'bg-amber-400' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${Math.min(100, slaProgress)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="p-8 grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="p-6 grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Main content */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-5">
           {/* Description */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Description</h2>
+            <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4">Description</h2>
             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
           </div>
 
-          {/* Timeline & Comments */}
+          {/* Tags */}
+          {ticket.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {ticket.tags.map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2.5 py-1 rounded-full">
+                  <Tag className="h-3 w-3 text-gray-400" /> {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Timeline */}
           <TicketTimeline
             ticketId={ticket.id}
             comments={ticket.comments.map((c) => ({
@@ -99,146 +166,135 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
           />
         </div>
 
-        {/* Sidebar info */}
+        {/* Sidebar */}
         <div className="space-y-4">
-          {/* Assignation */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Affectation</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-3">
-                <User className="h-4 w-4 text-gray-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-gray-400">Assigné à</p>
-                  <p className="font-medium text-gray-800">{ticket.assignee?.name ?? <span className="text-gray-400 italic">Non assigné</span>}</p>
-                </div>
-              </div>
-              {ticket.team && (
-                <div className="flex items-center gap-3">
-                  <User className="h-4 w-4 text-gray-400 shrink-0" />
-                  <div>
-                    <p className="text-xs text-gray-400">Équipe</p>
-                    <p className="font-medium text-gray-800">{ticket.team.name}</p>
-                  </div>
-                </div>
-              )}
-              {ticket.department && (
-                <div className="flex items-center gap-3">
-                  <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
-                  <div>
-                    <p className="text-xs text-gray-400">Département</p>
-                    <p className="font-medium text-gray-800">{ticket.department.name}</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <User className="h-4 w-4 text-gray-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-gray-400">Créé par</p>
-                  <p className="font-medium text-gray-800">{ticket.createdBy.name}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SLA & Dates */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">SLA & Dates</h2>
-            <div className="space-y-3 text-sm">
-              {ticket.slaPolicy && (
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-gray-400 shrink-0" />
-                  <div>
-                    <p className="text-xs text-gray-400">Politique SLA</p>
-                    <p className="font-medium text-gray-800">{ticket.slaPolicy.name}</p>
-                    <p className="text-xs text-gray-400">Résolution : {ticket.slaPolicy.resolutionMinutes / 60}h</p>
-                  </div>
-                </div>
-              )}
-              {ticket.dueAt && (
-                <div className="flex items-center gap-3">
-                  <Calendar className={`h-4 w-4 shrink-0 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} />
-                  <div>
-                    <p className="text-xs text-gray-400">Échéance</p>
-                    <p className={`font-medium ${isOverdue ? 'text-red-600' : 'text-gray-800'}`}>{formatDate(ticket.dueAt.toISOString())}</p>
-                  </div>
-                </div>
-              )}
-              {ticket.firstResponseAt && (
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-gray-400 shrink-0" />
-                  <div>
-                    <p className="text-xs text-gray-400">1ère réponse</p>
-                    <p className="font-medium text-gray-800">{formatDate(ticket.firstResponseAt.toISOString())}</p>
-                  </div>
-                </div>
-              )}
-              {ticket.resolvedAt && (
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-gray-400 shrink-0" />
-                  <div>
-                    <p className="text-xs text-gray-400">Résolu le</p>
-                    <p className="font-medium text-gray-800">{formatDate(ticket.resolvedAt.toISOString())}</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-gray-400">Créé le</p>
-                  <p className="font-medium text-gray-800">{formatDate(ticket.createdAt.toISOString())}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact */}
+          {/* Requester */}
           {(ticket.contact || ticket.company) && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Demandeur</h2>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Demandeur</h2>
               {ticket.contact && (
-                <div className="space-y-1">
-                  <Link href={`/contacts/${ticket.contact.id}`} className="font-semibold text-sm text-indigo-600 hover:underline">
-                    {ticket.contact.firstName} {ticket.contact.lastName}
-                  </Link>
-                  {ticket.contact.email && <p className="text-xs text-gray-400">{ticket.contact.email}</p>}
-                  {ticket.contact.phone && <p className="text-xs text-gray-400">{ticket.contact.phone}</p>}
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    {ticket.contact.firstName[0]}{ticket.contact.lastName[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <Link href={`/contacts/${ticket.contact.id}`} className="text-sm font-semibold text-gray-800 hover:text-indigo-600 transition-colors">
+                      {ticket.contact.firstName} {ticket.contact.lastName}
+                    </Link>
+                    {ticket.contact.email && (
+                      <a href={`mailto:${ticket.contact.email}`} className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 mt-0.5 truncate">
+                        <MailOpen className="h-3 w-3 shrink-0" /> {ticket.contact.email}
+                      </a>
+                    )}
+                    {ticket.contact.phone && (
+                      <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                        <Phone className="h-3 w-3 shrink-0" /> {ticket.contact.phone}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
               {ticket.company && (
-                <Link href={`/companies/${ticket.company.id}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-indigo-600">
-                  <Building2 className="h-4 w-4 text-gray-400" />
+                <Link href={`/companies/${ticket.company.id}`} className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600 transition-colors">
+                  <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
                   {ticket.company.name}
                 </Link>
               )}
             </div>
           )}
 
-          {/* Tags */}
-          {ticket.tags.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tags</h2>
-              <div className="flex flex-wrap gap-1.5">
-                {ticket.tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
-                    <Tag className="h-3 w-3" /> {tag}
-                  </span>
-                ))}
-              </div>
+          {/* Assignment */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Affectation</h2>
+            <div className="space-y-3">
+              <InfoRow icon={User} label="Assigné à">
+                {ticket.assignee ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                      <span className="text-[9px] font-bold text-indigo-600">{ticket.assignee.name?.[0]}</span>
+                    </div>
+                    <span className="text-sm font-medium text-gray-800">{ticket.assignee.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-400 italic">Non assigné</span>
+                )}
+              </InfoRow>
+              {ticket.team && <InfoRow icon={User} label="Équipe"><span className="text-sm font-medium text-gray-800">{ticket.team.name}</span></InfoRow>}
+              {ticket.department && <InfoRow icon={Building2} label="Département"><span className="text-sm font-medium text-gray-800">{ticket.department.name}</span></InfoRow>}
+              <InfoRow icon={User} label="Créé par"><span className="text-sm font-medium text-gray-800">{ticket.createdBy.name}</span></InfoRow>
             </div>
-          )}
+          </div>
+
+          {/* Dates & SLA */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Dates & SLA</h2>
+            <div className="space-y-3">
+              <InfoRow icon={Calendar} label="Créé le"><span className="text-sm text-gray-600">{formatDate(ticket.createdAt.toISOString())}</span></InfoRow>
+              {ticket.dueAt && (
+                <InfoRow icon={Clock} label="Échéance">
+                  <span className={`text-sm font-semibold ${isOverdue && !isClosed ? 'text-red-600' : 'text-gray-800'}`}>
+                    {formatDate(ticket.dueAt.toISOString())}
+                  </span>
+                </InfoRow>
+              )}
+              {ticket.firstResponseAt && (
+                <InfoRow icon={CheckCircle2} label="1ère réponse">
+                  <span className="text-sm text-gray-600">{formatDate(ticket.firstResponseAt.toISOString())}</span>
+                </InfoRow>
+              )}
+              {ticket.resolvedAt && (
+                <InfoRow icon={CheckCircle2} label="Résolu le">
+                  <span className="text-sm text-emerald-600 font-medium">{formatDate(ticket.resolvedAt.toISOString())}</span>
+                </InfoRow>
+              )}
+              {ticket.slaPolicy && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-[11px] text-gray-400 mb-1">Politique SLA</p>
+                  <p className="text-sm font-medium text-gray-700">{ticket.slaPolicy.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Résolution cible : {ticket.slaPolicy.resolutionMinutes >= 60
+                      ? `${ticket.slaPolicy.resolutionMinutes / 60}h`
+                      : `${ticket.slaPolicy.resolutionMinutes}min`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Satisfaction */}
           {ticket.satisfactionScore && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Satisfaction client</h2>
-              <div className="flex items-center gap-2">
-                {'★'.repeat(ticket.satisfactionScore)}{'☆'.repeat(5 - ticket.satisfactionScore)}
-                <span className="text-sm font-semibold text-gray-700">{ticket.satisfactionScore}/5</span>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Satisfaction client</h2>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <span key={i} className={`text-lg ${i < ticket.satisfactionScore! ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
+                  ))}
+                </div>
+                <span className="text-sm font-bold text-gray-700">{ticket.satisfactionScore}/5</span>
               </div>
-              {ticket.satisfactionNote && <p className="text-sm text-gray-500 italic">&ldquo;{ticket.satisfactionNote}&rdquo;</p>}
+              {ticket.satisfactionNote && (
+                <p className="text-sm text-gray-500 italic border-l-2 border-gray-200 pl-3 leading-relaxed">&ldquo;{ticket.satisfactionNote}&rdquo;</p>
+              )}
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ icon: Icon, label, children }: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-0.5" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
+        {children}
       </div>
     </div>
   );

@@ -30,6 +30,11 @@ export const STATUS_LABELS: Record<string, string> = {
   INACTIVE: 'Inactif',
 };
 
+export function isPast(date: string | Date | null | undefined): boolean {
+  if (!date) return false;
+  return new Date(date) < new Date();
+}
+
 export const SIZE_LABELS: Record<string, string> = {
   MICRO: 'Micro (< 10)',
   SMALL: 'Petite (10–49)',
