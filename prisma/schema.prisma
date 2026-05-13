@@ -351,6 +351,7 @@ model Contact {
   @@index([organizationId])
   @@index([status])
   @@index([email])
+  @@index([phone])
 }
 
 model Opportunity {
@@ -379,7 +380,33 @@ model Opportunity {
   @@index([organizationId])
 }
 
+// ── Workflow Automation ───────────────────────────────────────────────
+model WorkflowRule {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean         @default(true)
+  trigger     WorkflowTrigger
+  conditions  Json            @default("[]")
+  actions     Json            @default("[]")
+  order       Int             @default(0)
+  stopOnMatch Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([trigger, isActive])
+  @@map("workflow_rules")
+}
+
 // ── Enums ─────────────────────────────────────────────────────────────
+enum WorkflowTrigger {
+  TICKET_CREATED
+  TICKET_UPDATED
+  TICKET_STATUS_CHANGED
+  TICKET_PRIORITY_CHANGED
+  TICKET_ASSIGNED
+}
+
 enum UserRole {
   ADMIN
   MANAGER

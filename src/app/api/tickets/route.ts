@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TicketStatus, TicketPriority, TicketType, TicketSource } from '@prisma/client';
+import { TicketStatus, TicketPriority, TicketType, TicketSource, WorkflowTrigger } from '@prisma/client';
+
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { parsePaginationParams } from '@/lib/pagination';
 import { sendTicketCreatedToAssignee, sendTicketCreatedToContact } from '@/lib/email';
 import { PRIORITY_LABELS } from '@/lib/labels';
+import { runWorkflows } from '@/lib/workflow';
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -16,6 +18,10 @@ export async function GET(req: NextRequest) {
   const status = sp.get('status') as TicketStatus | null;
   const priority = sp.get('priority') as TicketPriority | null;
   const type = sp.get('type') as TicketType | null;
+  const source = sp.get('source') as TicketSource | null;
+  const contactId = sp.get('contactId');
+  const from = sp.get('from');
+  const to = sp.get('to');
   const assigneeId = sp.get('assigneeId');
   const mine = sp.get('mine') === 'true';
 
@@ -30,6 +36,9 @@ export async function GET(req: NextRequest) {
     ...(status ? { status } : {}),
     ...(priority ? { priority } : {}),
     ...(type ? { type } : {}),
+    ...(source ? { source } : {}),
+    ...(contactId ? { contactId } : {}),
+    ...(from || to ? { createdAt: { ...(from && { gte: new Date(from) }), ...(to && { lte: new Date(to) }) } } : {}),
     ...(mine ? { assigneeId: session.user?.id } : assigneeId ? { assigneeId } : {}),
   };
 
@@ -116,6 +125,19 @@ export async function POST(req: NextRequest) {
       void sendTicketCreatedToContact(emailCtx, { name: `${contact.firstName} ${contact.lastName}`, email: contact.email });
     }
   }
+
+  // Run TICKET_CREATED workflows (fire-and-forget)
+  void runWorkflows(WorkflowTrigger.TICKET_CREATED, {
+    id: ticket.id,
+    status: ticket.status,
+    priority: ticket.priority,
+    type: ticket.type,
+    source: ticket.source,
+    category: ticket.category,
+    tags: ticket.tags,
+    assigneeId: ticket.assigneeId,
+    teamId: ticket.teamId,
+  }, session.user.id);
 
   return NextResponse.json(ticket, { status: 201 });
 }

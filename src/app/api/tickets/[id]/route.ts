@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
-import { TicketStatus } from '@prisma/client';
-import { sendTicketStatusChanged, sendTicketAssigned } from '@/lib/email';
+import { TicketStatus, WorkflowTrigger } from '@prisma/client';
+import { sendTicketStatusChanged, sendTicketAssigned, sendTicketResolvedToContact } from '@/lib/email';
 import { PRIORITY_LABELS, TICKET_STATUS_LABELS } from '@/lib/labels';
+import { runWorkflows } from '@/lib/workflow';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -43,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const old = await prisma.ticket.findUnique({
     where: { id },
-    select: { status: true, assigneeId: true, title: true, number: true, priority: true },
+    select: { status: true, assigneeId: true, contactId: true, title: true, number: true, priority: true },
   });
   if (!old) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -90,6 +91,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
   }
+
+  // Notifier le contact quand le ticket passe à RESOLVED
+  if (body.status === TicketStatus.RESOLVED && old.status !== TicketStatus.RESOLVED) {
+    const contactId = ticket.contactId ?? old.contactId;
+    if (contactId) {
+      const contact = await prisma.contact.findUnique({
+        where: { id: contactId },
+        select: { firstName: true, lastName: true, email: true },
+      });
+      if (contact?.email) {
+        void sendTicketResolvedToContact(emailCtx, {
+          name: `${contact.firstName} ${contact.lastName}`,
+          email: contact.email,
+        });
+      }
+    }
+  }
+
+  // Run TICKET_UPDATED + specific trigger workflows
+  const triggers: WorkflowTrigger[] = [WorkflowTrigger.TICKET_UPDATED];
+  if (body.status && body.status !== old.status) triggers.push(WorkflowTrigger.TICKET_STATUS_CHANGED);
+  if (body.priority && body.priority !== old.priority) triggers.push(WorkflowTrigger.TICKET_PRIORITY_CHANGED);
+  if (body.assigneeId !== undefined && body.assigneeId !== old.assigneeId) triggers.push(WorkflowTrigger.TICKET_ASSIGNED);
+
+  const wfCtx = {
+    id: ticket.id,
+    status: ticket.status,
+    priority: ticket.priority,
+    type: ticket.type,
+    source: ticket.source,
+    category: ticket.category,
+    tags: ticket.tags,
+    assigneeId: ticket.assigneeId,
+    teamId: ticket.teamId,
+  };
+  for (const t of triggers) void runWorkflows(t, wfCtx, session.user.id!);
 
   return NextResponse.json(ticket);
 }
