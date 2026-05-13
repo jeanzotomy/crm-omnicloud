@@ -3,12 +3,13 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft, Clock, User, Building2, Tag, Calendar, AlertCircle, CheckCircle2, MailOpen, Phone } from 'lucide-react';
+import { ArrowLeft, Clock, User, Building2, Tag, Calendar, AlertCircle, CheckCircle2, MailOpen, Phone, Sparkles } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { ticketStatusBadge, ticketPriorityBadge, ticketTypeBadge } from '@/lib/badges';
 import { formatDate } from '@/lib/utils';
 import { TicketStatus } from '@prisma/client';
 import TicketTimeline from '@/components/tickets/TicketTimeline';
+import AiAnalyzeButton from '@/components/tickets/AiAnalyzeButton';
 
 const PRIORITY_GRADIENT: Record<string, string> = {
   CRITICAL: 'from-red-600 to-red-500',
@@ -98,12 +99,15 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
         </div>
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-xl font-bold text-gray-900 flex-1 leading-snug">{ticket.title}</h1>
-          <Link
-            href={`/tickets/${ticket.id}/edit`}
-            className="shrink-0 rounded-xl border border-gray-200 text-gray-600 px-4 py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
-          >
-            Modifier
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <AiAnalyzeButton ticketId={ticket.id} />
+            <Link
+              href={`/tickets/${ticket.id}/edit`}
+              className="rounded-xl border border-gray-200 text-gray-600 px-4 py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
+            >
+              Modifier
+            </Link>
+          </div>
         </div>
 
         {/* SLA bar */}
@@ -200,6 +204,14 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
                   {ticket.company.name}
                 </Link>
               )}
+            </div>
+          )}
+
+          {/* AI category */}
+          {ticket.category && (
+            <div className="bg-violet-50 rounded-2xl border border-violet-100 px-5 py-3 flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+              <p className="text-xs font-medium text-violet-700">{ticket.category}</p>
             </div>
           )}
 

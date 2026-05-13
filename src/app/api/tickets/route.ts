@@ -7,6 +7,7 @@ import { parsePaginationParams } from '@/lib/pagination';
 import { sendTicketCreatedToAssignee, sendTicketCreatedToContact } from '@/lib/email';
 import { PRIORITY_LABELS } from '@/lib/labels';
 import { runWorkflows } from '@/lib/workflow';
+import { analyzeTicket } from '@/lib/ai';
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -125,6 +126,36 @@ export async function POST(req: NextRequest) {
       void sendTicketCreatedToContact(emailCtx, { name: `${contact.firstName} ${contact.lastName}`, email: contact.email });
     }
   }
+
+  // AI analysis + workflow (fire-and-forget)
+  void (async () => {
+    const analysis = await analyzeTicket(ticket.title, ticket.description);
+    if (analysis) {
+      const patch: Record<string, unknown> = {};
+      if (!ticket.category && analysis.category) patch.category = analysis.category;
+      // Upgrade priority only if ticket was left at default MEDIUM and AI is confident
+      if (ticket.priority === TicketPriority.MEDIUM && analysis.confidence >= 0.8
+        && analysis.suggestedPriority !== TicketPriority.MEDIUM) {
+        patch.priority = analysis.suggestedPriority;
+      }
+      if (analysis.suggestedTags.length > 0) {
+        patch.tags = [...new Set([...ticket.tags, ...analysis.suggestedTags])];
+      }
+      if (Object.keys(patch).length > 0) {
+        await prisma.ticket.update({ where: { id: ticket.id }, data: patch });
+      }
+      if (analysis.summary) {
+        await prisma.ticketComment.create({
+          data: {
+            ticketId: ticket.id,
+            authorId: session.user.id,
+            isInternal: true,
+            body: `**Analyse IA** · Catégorie : ${analysis.category} · Priorité suggérée : ${analysis.suggestedPriority} (confiance ${Math.round(analysis.confidence * 100)} %)\n\n${analysis.summary}`,
+          },
+        });
+      }
+    }
+  })();
 
   // Run TICKET_CREATED workflows (fire-and-forget)
   void runWorkflows(WorkflowTrigger.TICKET_CREATED, {
