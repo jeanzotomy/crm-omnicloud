@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/utils';
 import { TicketStatus } from '@prisma/client';
 import TicketTimeline from '@/components/tickets/TicketTimeline';
 import AiAnalyzeButton from '@/components/tickets/AiAnalyzeButton';
+import VoiceCallPanel from '@/components/tickets/VoiceCallPanel';
 
 const PRIORITY_GRADIENT: Record<string, string> = {
   CRITICAL: 'from-red-600 to-red-500',
@@ -203,6 +204,17 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
                   <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
                   {ticket.company.name}
                 </Link>
+              )}
+
+              {/* Voice call panel — shown when contact has a phone number */}
+              {ticket.contact?.phone && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <VoiceCallPanel
+                    contactName={`${ticket.contact.firstName} ${ticket.contact.lastName}`}
+                    contactPhone={ticket.contact.phone}
+                    ticketId={ticket.id}
+                  />
+                </div>
               )}
             </div>
           )}
