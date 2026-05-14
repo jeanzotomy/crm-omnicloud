@@ -85,6 +85,25 @@ export async function sendTicketAssigned(
   await sendTicketCreatedToAssignee(ctx, assignee);
 }
 
+export async function sendTicketResolvedToContact(
+  ctx: TicketEmailContext,
+  contact: { name: string; email: string },
+) {
+  const resend = getResend();
+  if (!resend) return;
+  await resend.emails.send({
+    from: FROM,
+    to: contact.email,
+    subject: `Votre demande a été résolue — ${ctx.ticketNumber}`,
+    html: emailTemplate({
+      title: 'Demande résolue',
+      body: `Bonjour ${contact.name},<br><br>Votre demande <strong>${ctx.ticketNumber}</strong> a été marquée comme résolue.<br><br><strong>${ctx.ticketTitle}</strong><br><br>Si le problème persiste, n'hésitez pas à nous recontacter.`,
+      ctaLabel: 'Voir ma demande',
+      ctaUrl: `${APP_URL}/tickets/${ctx.ticketId}`,
+    }),
+  });
+}
+
 function emailTemplate({ title, body, ctaLabel, ctaUrl }: {
   title: string;
   body: string;

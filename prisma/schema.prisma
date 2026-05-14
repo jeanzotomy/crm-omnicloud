@@ -31,6 +31,8 @@ model User {
   knowledgeArticles KnowledgeArticle[]
   leadOf           Team[]               @relation("TeamLead")
   orgMemberships   OrganizationMember[]
+  enabledModules   OrganizationModule[] @relation("ModuleEnabledBy")
+  callCenterProfile UserCallCenterProfile?
   ticketAttachments TicketAttachment[]
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
@@ -71,6 +73,7 @@ model Organization {
   slug         String               @unique
   plan         OrgPlan              @default(FREE)
   members      OrganizationMember[]
+  modules      OrganizationModule[]
   tickets      Ticket[]
   contacts     Contact[]
   companies    Company[]
@@ -94,6 +97,40 @@ model OrganizationMember {
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("organization_members")
+}
+
+// ── Module System ─────────────────────────────────────────────────────
+model OrganizationModule {
+  id             String       @id @default(cuid())
+  organizationId String
+  module         ModuleType
+  enabled        Boolean      @default(true)
+  // Module-specific settings (e.g. CALL_CENTER: { signalrUrl, acsResourceId })
+  config         Json         @default("{}")
+  enabledAt      DateTime     @default(now())
+  enabledById    String?
+  enabledBy      User?        @relation("ModuleEnabledBy", fields: [enabledById], references: [id], onDelete: SetNull)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, module])
+  @@index([organizationId])
+  @@map("organization_modules")
+}
+
+// ── Call Center Bridge ────────────────────────────────────────────────
+// Links a CRM user to their Azure Communication Services identity.
+// Populated on first CC login; eliminates the need to query the CC Identity service.
+model UserCallCenterProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communicationUserId String?  @unique
+  extension           String?
+  maxConcurrentCalls  Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("user_call_center_profiles")
 }
 
 // ── Omnichannel ───────────────────────────────────────────────────────
@@ -405,6 +442,16 @@ enum WorkflowTrigger {
   TICKET_STATUS_CHANGED
   TICKET_PRIORITY_CHANGED
   TICKET_ASSIGNED
+}
+
+enum ModuleType {
+  CRM          // Contacts, Companies, Opportunities, Pipeline
+  SUPPORT      // Tickets, SLA, Knowledge Base, Reports
+  CALL_CENTER  // Agent Desktop, Queues, IVR, ACS, Supervisor Dashboard
+  HR           // Employees, Leave, Payroll
+  FINANCE      // Invoices, Budget, Expenses
+  GED          // Document Management
+  INTEGRATIONS // API keys, Webhooks, External connectors
 }
 
 enum UserRole {

@@ -21,10 +21,23 @@ export async function GET(req: NextRequest) {
   const type = sp.get('type') as TicketType | null;
   const source = sp.get('source') as TicketSource | null;
   const contactId = sp.get('contactId');
+  const companyId = sp.get('companyId');
+  const teamId = sp.get('teamId');
   const from = sp.get('from');
   const to = sp.get('to');
   const assigneeId = sp.get('assigneeId');
   const mine = sp.get('mine') === 'true';
+
+  // Multi-value: ?statuses=OPEN,IN_PROGRESS  (takes priority over single status)
+  const statuses = sp.get('statuses')?.split(',').filter(Boolean) as TicketStatus[] | undefined;
+  const priorities = sp.get('priorities')?.split(',').filter(Boolean) as TicketPriority[] | undefined;
+
+  // Sort: ?sort=createdAt:desc  default: priority asc, createdAt desc
+  const SORTABLE = new Set(['createdAt', 'updatedAt', 'priority', 'status', 'title', 'number']);
+  const [sortField = 'createdAt', sortDir = 'desc'] = (sp.get('sort') ?? '').split(':');
+  const orderBy = SORTABLE.has(sortField)
+    ? [{ [sortField]: sortDir === 'asc' ? 'asc' as const : 'desc' as const }]
+    : [{ priority: 'asc' as const }, { createdAt: 'desc' as const }];
 
   const where = {
     ...(search ? {
@@ -34,11 +47,13 @@ export async function GET(req: NextRequest) {
         { description: { contains: search, mode: 'insensitive' as const } },
       ],
     } : {}),
-    ...(status ? { status } : {}),
-    ...(priority ? { priority } : {}),
+    ...(statuses?.length ? { status: { in: statuses } } : status ? { status } : {}),
+    ...(priorities?.length ? { priority: { in: priorities } } : priority ? { priority } : {}),
     ...(type ? { type } : {}),
     ...(source ? { source } : {}),
     ...(contactId ? { contactId } : {}),
+    ...(companyId ? { companyId } : {}),
+    ...(teamId ? { teamId } : {}),
     ...(from || to ? { createdAt: { ...(from && { gte: new Date(from) }), ...(to && { lte: new Date(to) }) } } : {}),
     ...(mine ? { assigneeId: session.user?.id } : assigneeId ? { assigneeId } : {}),
   };
@@ -48,7 +63,7 @@ export async function GET(req: NextRequest) {
       where,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
+      orderBy,
       include: {
         assignee: { select: { id: true, name: true, email: true } },
         team: { select: { id: true, name: true } },

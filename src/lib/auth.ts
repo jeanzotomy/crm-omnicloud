@@ -61,6 +61,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
+
       // Auto-provision Entra ID users on first login
       if (account?.provider === 'microsoft-entra-id' && user.email) {
         let dbUser = await prisma.user.findUnique({ where: { email: user.email } });
@@ -85,7 +86,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         const u = user as { id?: string; role?: string; organizationId?: string | null; orgRole?: string | null };
         token.id = u.id;
@@ -109,6 +110,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (dbUser) token.role = dbUser.role;
         }
       }
+      // Load enabled modules — refreshed on login and when admin calls session.update()
+      if (user || trigger === 'update' || token.enabledModules === undefined) {
+        if (token.organizationId) {
+          const mods = await prisma.organizationModule.findMany({
+            where: { organizationId: token.organizationId as string, enabled: true },
+            select: { module: true },
+          });
+          token.enabledModules = mods.map(m => m.module as string);
+        } else {
+          token.enabledModules = [];
+        }
+      }
       return token;
     },
     async session({ session, token }) {
@@ -117,6 +130,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
         session.user.organizationId = (token.organizationId as string | null) ?? null;
         session.user.orgRole = (token.orgRole as string | null) ?? null;
+        session.user.enabledModules = (token.enabledModules as string[]) ?? [];
       }
       return session;
     },

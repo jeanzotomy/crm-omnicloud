@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 const tabs = [
   { href: '/admin', label: 'Vue d\'ensemble', exact: true },
+  { href: '/admin/modules', label: 'Modules' },
   { href: '/admin/users', label: 'Utilisateurs' },
   { href: '/admin/sla', label: 'Politiques SLA' },
   { href: '/admin/teams', label: 'Équipes' },
